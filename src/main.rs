@@ -67,6 +67,52 @@ impl Deserializer for StockFinanceValue {
     }
 }
 
+#[derive(Debug)]
+struct TradeUnit {
+    open: i32,
+    close: i32,
+    high: i32,
+    low: i32,
+    volume: i32,
+    amount: f32,
+}
+const TradeUnitSize:usize = 24;
+
+impl Deserializer for TradeUnit {
+    fn deserializer(buffer: &[u8]) -> Self {
+        TradeUnit { 
+            open: LittleEndian::read_i32(&buffer[0..3]), 
+            high: LittleEndian::read_i32(&buffer[4..7]),
+            low: LittleEndian::read_i32(&buffer[8..11]),
+            close: LittleEndian::read_i32(&buffer[12..15]), 
+            amount: LittleEndian::read_f32(&buffer[16..19]), 
+            volume: LittleEndian::read_i32(&buffer[20..23]),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DayTradeUnit {
+    date: i32,
+    tradeData: TradeUnit
+}
+const DayTradeUnitSize: usize = 32;
+
+impl Deserializer for DayTradeUnit {
+    fn deserializer(buffer: &[u8]) -> Self {
+        DayTradeUnit { 
+            date: LittleEndian::read_i32(&buffer[0..3]), 
+            tradeData:  TradeUnit::deserializer(&buffer[4..]) }
+    }
+}
+
+#[derive(Debug)]
+struct MinuteTradeUnit {
+    date: i32,
+    offset: i32,
+    tradeData: TradeUnit
+}
+
 fn main() {
     let parent = env::current_dir().unwrap();
     let data_path = Path::new(&parent).join("example").join("gpcw20190630.dat");

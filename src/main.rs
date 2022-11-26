@@ -1,3 +1,5 @@
+#![feature(int_roundings)]
+
 use byteorder::{ByteOrder, LittleEndian};
 use std::{
     env,
@@ -6,6 +8,7 @@ use std::{
     mem::{align_of, size_of},
     path::Path,
 };
+
 
 #[repr(C)]
 #[derive(Debug)]
@@ -109,8 +112,24 @@ impl Deserializer for DayTradeUnit {
 #[derive(Debug)]
 struct MinuteTradeUnit {
     date: i32,
-    offset: i32,
+    // 0点至目前的分钟数
+    offset: i16,
     tradeData: TradeUnit
+}
+const MinuteTradeUnitSize: usize = 32;
+
+impl Deserializer for MinuteTradeUnit {
+    fn deserializer(buffer: &[u8]) -> Self {
+        let date_raw = LittleEndian::read_i16(&buffer[0..1]);
+        let year = date_raw.div_floor(2048) + 2004;
+        let month = (date_raw % 2048).div_floor(100);
+        let day = (date_raw % 2048) % 100;
+        MinuteTradeUnit { 
+            date: 0, // todo
+            offset: LittleEndian::read_i16(&buffer[2..3]),
+            tradeData: TradeUnit::deserializer(&buffer[4..]) 
+        }
+    }
 }
 
 fn main() {

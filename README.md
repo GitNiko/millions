@@ -1,4 +1,4 @@
-# 通信达数据解析
+# 通达信数据解析
 
 ## 日线数据格式
 ```sh
@@ -28,3 +28,7 @@
 
 ## 财务数据
 https://github.com/rainx/pytdx/pull/150/files
+
+## todo
+- 支持除权数据
+- 

@@ -65,24 +65,35 @@ impl<'a> BackTest<'a> {
 
 #[cfg(test)]
 mod tests {
-    use ta::{indicators::ExponentialMovingAverage, Next};
+    use ta::{indicators::{ExponentialMovingAverage, SimpleMovingAverage}, Next};
 
     use crate::{strategy::Account, data::DayTradeUnit};
 
     use super::{BackTest, Strategy};
 
+    pub trait Serise {
+        fn get();
+        fn add();
+        fn calc();
+    }
     pub struct MACross {
         ema5: ExponentialMovingAverage,
         ema10: ExponentialMovingAverage,
-        EMA5: Vec<f64>,
-        EMA10: Vec<f64>
+        ema5_data: Vec<f64>,
+        ema10_data: Vec<f64>,
+        sma5: SimpleMovingAverage,
+        sma10: SimpleMovingAverage,
+        sma5_data: Vec<f64>,
+        sma10_data: Vec<f64>
     }
 
     impl MACross {
         fn new() -> Self {
             let ema5 = ExponentialMovingAverage::new(5).unwrap();
             let ema10 = ExponentialMovingAverage::new(10).unwrap();
-            MACross { ema5, ema10, EMA5: Vec::new(), EMA10: Vec::new() }
+            let sma5 = SimpleMovingAverage::new(5).unwrap();
+            let sma10 = SimpleMovingAverage::new(10).unwrap();
+            MACross { ema5, ema10, ema5_data: Vec::new(), ema10_data: Vec::new(), sma5, sma10, sma5_data: Vec::new(), sma10_data: Vec::new() }
         }
     }
 
@@ -91,9 +102,14 @@ mod tests {
             if let Some(today) = stock_trade_info.last() {
                 let ema5 = self.ema5.next(f64::from(today.trade_data.close));
                 let ema10 = self.ema10.next(f64::from(today.trade_data.close));
-                self.EMA5.push(ema5);
-                self.EMA10.push(ema10);
-                println!("{:?}", ema5);
+                self.ema5_data.push(ema5);
+                self.ema10_data.push(ema10);
+                let sma5 = self.sma5.next(f64::from(today.trade_data.close));
+                let sma10 = self.sma10.next(f64::from(today.trade_data.close));
+                if sma5 > sma10 && sma10 > 0.0 && sma5 > 0.0 {
+                    // println!("{}  {}", sma5, sma10)
+                    println!("{:?}", today);
+                }
             }
         }
     }
@@ -103,6 +119,6 @@ mod tests {
         let mut ma = MACross::new();
         let strategy = &mut ma as &mut dyn Strategy;
         let mut backTest = BackTest::new("603339", strategy).unwrap();
-        backTest.run("20160520", "20180601");
+        backTest.run("20220901", "20230103");
     }
 }

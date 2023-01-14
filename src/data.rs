@@ -144,7 +144,14 @@ pub enum DataSourceError {
     Io {
         #[from]
         source: io::Error,
-    }
+    },
+    #[error("read env error")]
+    Env {
+        #[from]
+        source: env::VarError
+    },
+    #[error("stock not exist in market")]
+    StockCodeNotExistInMarket
 }
 
 pub type Result<T, E = DataSourceError> = std::result::Result<T, E>;
@@ -153,6 +160,61 @@ pub type Result<T, E = DataSourceError> = std::result::Result<T, E>;
  * 股票代码
  */
 pub type StockCode = &'static str;
+pub trait WhereIsFrom {
+    /// 判断股票属于哪个市场
+    fn where_is_from(&self) -> Option<Market>;
+}
+impl WhereIsFrom for &str {
+    fn where_is_from(&self) -> Option<Market> {
+        if self.starts_with("600") 
+            || self.starts_with("601") 
+            || self.starts_with("603")
+            || self.starts_with("605") 
+            || self.starts_with("688")
+            || self.starts_with("900"){
+            return Some(Market::SH)
+        }
+        if self.starts_with("000")
+            || self.starts_with("001")
+            || self.starts_with("002")
+            || self.starts_with("003")
+            || self.starts_with("300")
+            || self.starts_with("301")
+            || self.starts_with("200")
+            || self.starts_with("201") {
+            return Some(Market::SZ)
+        }
+        None
+    }
+}
+/// 市场
+pub enum Market {
+    SZ,
+    SH
+}
+/**
+ * todo: 工具函数
+ * 1 通过code找到文件路径
+ * 2 通过code判断是属于哪个市场
+ */
+fn get_day_path_by_code(code: StockCode) -> Result<PathBuf> {
+    let root = env::var("MILLIONS_TDX")?;
+    let market = code.where_is_from().ok_or(DataSourceError::StockCodeNotExistInMarket)?;
+    match market {
+        Market::SZ => {
+            let file_name = format!("sz{}.day", code);
+            let data_path = Path::new(&root).join("sz").join("lday").join(file_name);
+            info!("day trade datafile path: {:?}", data_path);
+            return Ok(data_path)
+        },
+        Market::SH =>  {
+            let file_name = format!("sh{}.day", code);
+            let data_path = Path::new(&root).join("sh").join("lday").join(file_name);
+            info!("day trade datafile path: {:?}", data_path);
+            return Ok(data_path)
+        },
+    }
+}
 /**
  * 股票价格
  */
@@ -244,18 +306,6 @@ impl TradeDataSource for StockTradeData {
     }
 }
 
-/**
- * todo: 工具函数
- * 1 通过code找到文件路径
- * 2 通过code判断是属于哪个市场
- */
-fn get_day_path_by_code(code: StockCode) -> Result<PathBuf> {
-    let parent = env::current_dir()?;
-    let file_name = format!("sh{}.day", code);
-    let data_path = Path::new(&parent).join("example").join(file_name);
-    info!("day trade datafile path: {:?}", data_path);
-    Ok(data_path)
-}
 
 #[cfg(test)]
 mod tests {

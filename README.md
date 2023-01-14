@@ -32,3 +32,10 @@ https://github.com/rainx/pytdx/pull/150/files
 ## todo
 - 支持除权数据
 - 
+
+## env
+### widnows
+```ps
+$env:MILLIONS_TDX="D:\workspace\stock\tdx\millions\example"
+cargo test
+```

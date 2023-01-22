@@ -1,8 +1,6 @@
-
-
 use crate::{
     data::{DayTradeUnit, DayTradeUnitIter, StockCode, StockTradeData, TradeDataSource},
-    strategy::{Account, TradeError, Trade},
+    strategy::{Account, Trade, TradeError},
 };
 
 use thiserror::Error;
@@ -30,7 +28,6 @@ pub struct BackTest<'a> {
 pub trait Strategy {
     fn next(&mut self, account: &mut Account, stock_trade_info: &Vec<DayTradeUnit>);
 }
-
 
 impl<'a> BackTest<'a> {
     fn new(code: StockCode, strategy: &'a mut dyn Strategy) -> Result<Self> {
@@ -62,54 +59,125 @@ impl<'a> BackTest<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use ta::{indicators::{ExponentialMovingAverage, SimpleMovingAverage}, Next};
+    use std::{
+        any::{request_ref, request_value, Any, Demand, Provider},
+        collections::HashMap,
+    };
 
-    use crate::{strategy::Account, data::DayTradeUnit};
+    use ta::{
+        indicators::{
+            ExponentialMovingAverage, MovingAverageConvergenceDivergence,
+            MovingAverageConvergenceDivergenceOutput, SimpleMovingAverage,
+        },
+        Next, Period,
+    };
+
+    use crate::{data::DayTradeUnit, strategy::Account};
 
     use super::{BackTest, Strategy};
 
-    pub trait Serise {
-        fn get();
-        fn add();
-        fn calc();
+    pub trait Serise: Provider {
+        fn add(&mut self, value: f64);
+    }
+
+    impl dyn Serise {
+        fn get<T: 'static>(&self) -> Option<&T> {
+            request_ref(self)
+        }
+    }
+    struct SeriseContainer<F, D> {
+        data: Vec<D>,
+        formula: F,
+    }
+    impl SeriseContainer<SimpleMovingAverage, f64> {
+        fn new(formula: SimpleMovingAverage) -> Self {
+            SeriseContainer {
+                data: vec![],
+                formula: formula,
+            }
+        }
+    }
+    impl Serise for SeriseContainer<SimpleMovingAverage, f64> {
+        fn add(&mut self, value: f64) {
+            let result = self.formula.next(value);
+            self.data.push(result);
+        }
+    }
+    impl Provider for SeriseContainer<SimpleMovingAverage, f64> {
+        fn provide<'a>(&'a self, demand: &mut Demand<'a>) {
+            demand.provide_ref(&self.data);
+        }
+    }
+    impl SeriseContainer<ExponentialMovingAverage, f64> {
+        fn new(formula: ExponentialMovingAverage) -> Self {
+            SeriseContainer {
+                data: vec![],
+                formula: formula,
+            }
+        }
+    }
+    impl Serise for SeriseContainer<ExponentialMovingAverage, f64> {
+        fn add(&mut self, value: f64) {
+            todo!()
+        }
+    }
+    impl Provider for SeriseContainer<ExponentialMovingAverage, f64> {
+        fn provide<'a>(&'a self, demand: &mut Demand<'a>) {
+            demand.provide_ref(&self.data);
+        }
+    }
+    type MACDFomula = MovingAverageConvergenceDivergence;
+    type MACD = MovingAverageConvergenceDivergenceOutput;
+    impl SeriseContainer<MACDFomula, MACD> {
+        fn new(formula: MACDFomula) -> Self {
+            SeriseContainer {
+                data: vec![],
+                formula: formula,
+            }
+        }
+    }
+    impl Serise for SeriseContainer<MACDFomula, MACD> {
+        fn add(&mut self, value: f64) {
+            let result = self.formula.next(value);
+            self.data.push(result);
+        }
+    }
+    impl Provider for SeriseContainer<MACDFomula, MACD> {
+        fn provide<'a>(&'a self, demand: &mut Demand<'a>) {
+            demand.provide_ref(&self.data);
+        }
     }
     pub struct MACross {
-        ema5: ExponentialMovingAverage,
-        ema10: ExponentialMovingAverage,
-        ema5_data: Vec<f64>,
-        ema10_data: Vec<f64>,
-        sma5: SimpleMovingAverage,
-        sma10: SimpleMovingAverage,
-        sma5_data: Vec<f64>,
-        sma10_data: Vec<f64>
+        serises: HashMap<&'static str, Box<dyn Serise>>,
     }
 
     impl MACross {
         fn new() -> Self {
-            let ema5 = ExponentialMovingAverage::new(5).unwrap();
-            let ema10 = ExponentialMovingAverage::new(10).unwrap();
-            let sma5 = SimpleMovingAverage::new(5).unwrap();
-            let sma10 = SimpleMovingAverage::new(10).unwrap();
-            MACross { ema5, ema10, ema5_data: Vec::new(), ema10_data: Vec::new(), sma5, sma10, sma5_data: Vec::new(), sma10_data: Vec::new() }
+            let sma5 = Box::new(SeriseContainer::<SimpleMovingAverage, f64>::new(
+                SimpleMovingAverage::new(5).unwrap(),
+            ));
+            let sma5: Box<dyn Serise> = sma5;
+            let macd = Box::new(SeriseContainer::<MACDFomula, MACD>::new(
+                MACDFomula::new(3, 6, 4).unwrap(),
+            ));
+            let macd: Box<dyn Serise> = macd;
+            let mut serises = HashMap::new();
+            serises.insert("sma5", sma5);
+            serises.insert("macd", macd);
+            MACross { serises }
         }
     }
 
     impl Strategy for MACross {
         fn next(&mut self, account: &mut Account, stock_trade_info: &Vec<DayTradeUnit>) {
             if let Some(today) = stock_trade_info.last() {
-                let ema5 = self.ema5.next(f64::from(today.trade_data.close));
-                let ema10 = self.ema10.next(f64::from(today.trade_data.close));
-                self.ema5_data.push(ema5);
-                self.ema10_data.push(ema10);
-                let sma5 = self.sma5.next(f64::from(today.trade_data.close));
-                let sma10 = self.sma10.next(f64::from(today.trade_data.close));
-                if sma5 > sma10 && sma10 > 0.0 && sma5 > 0.0 {
-                    // println!("{}  {}", sma5, sma10)
-                    println!("{:?}", today);
+                for (k, v) in self.serises.iter_mut() {
+                    v.add(f64::from(today.trade_data.close));
                 }
+                let macd: &Vec<MACD> = self.serises.get("macd").unwrap().get().unwrap();
+                println!("macd: {:?}", macd)
             }
         }
     }
